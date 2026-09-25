@@ -1,0 +1,2 @@
+# fatrocu-cli
+Fatrocu CLI

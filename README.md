@@ -1,250 +1,107 @@
-# Fatrocu CLI v3.1.0
+# Fatrocu CLI
 
-> **İmajeV-2B-Q8_0** ile güçlendirilmiş, tamamen yerel çalışan fatura işleme aracı. OCR + alan çıkarma tek bir model çağrısında.
+> İmajeV-2B-Q8_0 ile güçlendirilmiş, tamamen yerel çalışan fatura işleme aracı. OCR + alan çıkarma tek model çağrısında.
 
 <div align="center">
 
-```
-            ('-.     .-') _   _  .-')                                      
-           ( OO ).-.(  OO) ) ( \( -O )                                     
-   ,------./ . --. //     .-'.'------.  .-'),-----.    .-----. ,--. ,--.   
-('-| _.---'| \-.  \ |'--...__)|   /`. '( OO'  .-.  '  '  .--./ |  | |  |   
-(OO|(_\  .-'-'  |  |'--.  .--'|  /  | |/   |  | |  |  |  |('-. |  | | .-') 
-/  |  '--.\| |_.'  |   |  |   |  |\  \    `'  '-'  '(_'  '--'\('  '-'(_.-' 
-\_)|  .--' |  .-.  |   |  |   |  |.\  \    `'  '-'  '(_'  '--'\('  '-'(_.-' 
-  \|  |_)  |  | |  |   |  |   |  | |\  \    `'  '-'  '(_'  '--'\('  '-'(_.-' 
-   `--'    `--' `--'   `--'   `--' '--'     `-----'    `-----'  `-----'    
+**[v3.1.0](https://github.com/Nec0ti/Fatrocu/releases)** — *25 Eylül 2026*
 
-     ★  AKILLI FATURA İŞLEME SİSTEMİ ★
-```
+[![Version](https://img.shields.io/badge/version-3.1.0-blue)](https://github.com/Nec0ti/Fatrocu/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
+[![Rust](https://img.shields.io/badge/rust-1.81+-orange)](https://www.rust-lang.org/)
 
-[![Release](https://img.shields.io/badge/v3.1.0-blue?style=for-the-badge&logo=github)](https://github.com/Nec0ti/Fatrocu/releases)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-green?style=for-the-badge&logo=windows)](https://github.com/Nec0ti/Fatrocu/releases)
-[![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](../LICENSE)
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?style=for-the-badge&logo=python)](https://www.python.org/)
-[![Rust](https://img.shields.io/badge/Rust-1.75%2B-orange?style=for-the-badge&logo=rust)](https://rustup.rs/)
-
-**%100 Yerel · Bulut yok · API maliyeti yok · Veri gizliliği tam garanti**
-
-[📦 İndir](https://github.com/Nec0ti/Fatrocu/releases) · [📚 Dokümantasyon](../docs/index.html) · [🐛 Hata Bildir](https://github.com/Nec0ti/Fatrocu/issues) · [📖 API Referansı](../docs/api-reference.md)
+[![GitHub Pages](https://img.shields.io/badge/docs-https%3A%2F%2Fnec0ti.github.io%2FFatrocu-green)](https://nec0ti.github.io/Fatrocu/docs)
+[![GitHub](https://img.shields.io/badge/GitHub-Nec0ti%2FFatrocu-red)](https://github.com/Nec0ti/Fatrocu)
 
 </div>
 
 ---
 
+## 🎯 Özellikler
+
+- **⚡ Hızlı** — ~55 token/s (CPU) / ~280 token/s (GPU)
+- **🔒 Yerel** — Veri hiç internete gitmez
+- **🤖 İmajeV-2B-Q8_0** — 2B parametreli, hafif ve güçlü model
+- **📄 PDF & Görsel** — Otomatik sayfa ayrıştırma
+- **📊 Excel Export** — İşlenen faturaları Excel/CSV olarak dışa aktarın
+- **💻 Tamamen Yerel** — Hiçbir API'ye ihtiyaç yok
+
+## 📸 Ekran Görüntüleri
+
+<div align="center" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;">
+    <div style="padding:12px;background:var(--bg-card);border:2px dashed var(--border-default);border-radius:12px;">
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">Terminal</div>
+        <div style="font-family:monospace;font-size:0.85rem;white-space:pre-wrap;">fatrocu status<br>✅ Online: ✓<br>✅ Model: İmajeV-2B-Q8_0<br>✅ Device: CPU</div>
+    </div>
+    <div style="padding:12px;background:var(--bg-card);border:2px dashed var(--border-default);border-radius:12px;">
+        <div style="font-size:0.8rem;color:var(--text-muted);margin-bottom:8px;">Excel Çıktı</div>
+        <div style="font-size:0.85rem;">Fatura No | Tarih | Cari | Tutar<br>12345 | 2026-01-15 | ABC Ltd. | 12,500.00 TL</div>
+    </div>
+</div>
+
 ## 🚀 Hızlı Başlangıç
 
-```bash
-# 1. Repoyu klonla
-git clone https://github.com/Nec0ti/Fatrocu.git
-cd Fatrocu/fatrocu-cli
-
-# 2. Bağımlılıkları kur
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-pip install excelize python-dateutil python-dotenv
-
-# 3. Model indir
-cargo run --release -- models --download "ImajeV-2B-Q8_0"
-
-# 4. Fatura işle
-cargo run --release -- process --model "ImajeV-2B-Q8_0" --image "fatura.pdf" --output "sonuc.json"
-
-# 5. Listele
-cargo run --release -- list --format json
-```
-
-### Çıktı örneği
-
-```json
-{
-  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-  "file_name": "fatura.pdf",
-  "file_type": "pdf",
-  "status": "success",
-  "fields": {
-    "cari_unvan": "ABC İŞLETMELERİ A.Ş.",
-    "cari_vergi_no": "1234567890",
-    "fatura_no": "DF02026000018498",
-    "fatura_tarihi": "15.01.2024",
-    "ettn_uuid": "550e8400-e29b-41d4-a716-446655440000",
-    "mal_hizmet_toplam_matrah": { "value": 15208.33, "detected": true },
-    "kdv_orani": { "value": 20, "detected": true },
-    "kdv_tutari": { "value": 3041.67, "detected": true },
-    "genel_toplam": { "value": 18250.00, "detected": true }
-  },
-  "line_items": [
-    {
-      "row": 1,
-      "cells": {
-        "urun_adi": "Hizmet A",
-        "miktar": 1,
-        "birim_fiyat": 15208.33,
-        "toplam": 15208.33
-      }
-    }
-  ],
-  "model_used": "ImajeV-2B-Q8_0",
-  "processing_time_ms": 1247,
-  "tokens_generated": 2048
-}
-```
-
----
-
-## ✨ Özellikler
-
-- **⚡ Hızlı İşleme**: ~55 token/s (CPU) / ~280 token/s (GPU RTX 4090)
-- **🔒 %100 Yerel**: Veri hiç internete gitmez. Tüm işlemler bilgisayarınızda.
-- **🤖 İmajeV-2B-Q8_0**: 2 milyar parametreli, hafif ve güçlü görsel-dil model.
-- **📄 PDF & Görsel**: PDF, PNG, JPG, TIFF, BMP formatlarını destekler.
-- **📊 Excel/CSV Export**: İşlenen faturaları Excel veya CSV olarak dışa aktarın.
-- **🎯 Tam Otomasyon**: Modeli indirin, uygulamayı çalıştırın — geri kalanını biz hallederiz.
-
----
-
-## 📦 Kurulum
-
-### Gereksinimler
-
-| Araç | Sürüm |
-|------|-------|
-| Rust | 1.75+ |
-| Python | 3.10+ |
-| Git | herhangi bir sürüm |
-| Disk | 7-8 GB boş alan (model için) |
-
-### Hızlı Kurulum
-
-```bash
-# 1. Rust kur (eğer yüklü değilse)
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# 2. Python bağımlılıkları
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-pip install excelize python-dateutil python-dotenv
-
-# 3. Fatrocu CLI'yi derle
-cargo build --release
-
-# 4. Model indir
-cargo run --release -- models --download "ImajeV-2B-Q8_0"
-
-# 5. Hazır!
-cargo run --release -- status
-```
-
----
-
-## 📋 Komutlar
-
-```bash
-# Fatura işleme
-fatrocu process --model ImajeV-2B-Q8_0 --image "fatura.pdf" --output "sonuc.json"
-
-# Model yönetimi
-fatrocu models --download "ImajeV-2B-Q8_0"
-fatrocu models --list
-fatrocu models --remove "Gemma-4-E4B"
-
-# Dışa aktarma
-fatrocu export --format xlsx --output "rapor.xlsx"
-fatrocu export --format csv --output "rapor.csv"
-
-# Durum kontrolü
-fatrocu status
-
-# Listele
-fatrocu list --format table
-```
-
-Detaylı API referansı için: [api-reference.md](../docs/api-reference.md)
-
----
-
-## 🧩 Mimari
-
-```
-┌──────────────────────────────────────────────────┐
-│              Fatrocu CLI v3.1.0                   │
-├──────────────────────────────────────────────────┤
-│                                                   │
-│  ┌─────────────────────┐                         │
-│  │  ImajeV-2B-Q8_0    │ ← Tek model, tek çağrı  │
-│  │  (2B parametre)     │ ← OCR + çıkarma         │
-│  └──────────┬──────────┘                         │
-│             │                                     │
-│   ┌─────────┼─────────┐                          │
-│   │ PDF → PNG│ Görsel │                          │
-│   └─────────┼─────────┘                          │
-│             │                                     │
-│   ┌─────────┼─────────┐                          │
-│   │ İmajeV-2B│ Unified │ ← Tek JSON çıktısı     │
-│   │ engine   │ prompt  │                         │
-│   └─────────┼─────────┘                          │
-│             │                                     │
-│   ┌─────────┼─────────┐                          │
-│   │ JSON    │ Fields  │ ← Çıkan veri            │
-│   │ result  │ + satırlar│                        │
-│   └─────────┼─────────┘                          │
-│             │                                     │
-│   ┌─────────┼─────────┐                          │
-│   │ Excel   │ CSV     │ ← Dışa aktarma          │
-│   │ / CSV   │         │                          │
-│   └─────────┴─────────┘                          │
-│                                                   │
-└──────────────────────────────────────────────────┘
-```
-
----
-
-## 📊 Performans
-
-| Sistem | Model | Sürat (token/s) |
-|--------|-------|-----------------|
-| Intel i7-13700K (CPU) | ImajeV-2B-Q8_0 | ~55 |
-| NVIDIA RTX 4090 (24GB VRAM) | ImajeV-2B-Q8_0 | ~280 |
-| NVIDIA RTX 4060 (8GB VRAM) | ImajeV-2B-Q8_0 | ~160 |
-| Intel Arc A770 | ImajeV-2B-Q8_0 | ~140 |
-
-> **Not**: Performans GPU modeline ve VRAM'a göre değişir. Modeli `--gpu-layers N` ile optimize edebilirsiniz.
-
----
-
-## 📚 Dokümantasyon
-
-- [📖 Hızlı Başlangıç](../docs/index.html) — Adım adım rehber
-- [📋 API Referansı](../docs/api-reference.md) — Detaylı API dokümantasyonu
-- [❓ Sık Sorulan Sorular](../docs/faq.html) — Sorun giderme
-
----
-
-## 🔧 Geliştirme
+### 1. Kurulum
 
 ```bash
 git clone https://github.com/Nec0ti/Fatrocu.git
 cd Fatrocu/fatrocu-cli
 cargo build --release
-
-# Debug modu
-cargo run -- process --model "ImajeV-2B-Q8_0" --image test.pdf
 ```
 
-Detaylı geliştirme rehberi için [CONTRIBUTING.md](CONTRIBUTING.md) dosyasına bakın.
+### 2. Model İndirme
 
----
+```bash
+cargo run --release -- models --download "ImajeV-2B-Q8_0"
+```
 
-## 🏆 Lisans
+### 3. İlk İşlem
 
-MIT Lisansı — [LICENSE](../LICENSE) dosyasına bakın.
+```bash
+cargo run --release -- process --model "ImajeV-2B-Q8_0" --image "invoice.pdf" --output "result.json"
+```
+
+## 📖 Dokümantasyon
+
+- [Ana Sayfa](https://nec0ti.github.io/Fatrocu/docs) — Genel özellikler
+- [Hızlı Başlangıç](https://nec0ti.github.io/Fatrocu/docs/quickstart.html) — Adım adım rehber
+- [API Referansı](https://nec0ti.github.io/Fatrocu/docs/api-reference.md) — Komut tablosu
+- [Modeller](https://nec0ti.github.io/Fatrocu/docs/models.html) — Model karşılaştırması
+- [Sık Sorulan Sorular](https://nec0ti.github.io/Fatrocu/docs/faq.html) — Sorun giderme
+
+## 🛠️ Komutlar
+
+| Komut | Açıklama |
+|--------|-----------|
+| `fatrocu process` | Fatura işleme |
+| `fatrocu models --download` | Model indirme |
+| `fatrocu models --list` | Model listesi |
+| `fatrocu export --format xlsx` | Excel export |
+| `fatrocu status` | Motor durumu |
+
+## 📋 Gereksinimler
+
+- **İşletim Sistemi:** Windows 10/11 x64, Linux, macOS
+- **RAM:** 8 GB (minimum), 16 GB+ önerilir
+- **GPU (opsiyonel):** 6 GB+ VRAM, NVIDIA CUDA 12+ veya AMD ROCm
+- **Disk:** ~7 GB boş alan
+
+## 🧪 Sistem Gereksinimleri
+
+| Model | Parametre | RAM | GPU VRAM | CPU (token/s) | GPU (token/s) |
+|-------|-----------|-----|----------|----------------|---------------|
+| İmajeV-2B-Q8_0 | 2B | ~8 GB | ~8 GB | ~55 | ~280 |
+| Gemma-4-E2B-It | 2.8B | ~9 GB | ~10 GB | ~48 | ~220 |
+| Gemma-4-E4B-It | 4.8B | ~16 GB | ~20 GB | ~35 | ~180 |
+| Mistral-Nemo-1.5B | 1.5B | ~4.5 GB | ~5 GB | ~120 | ~450 |
+
+## 📄 Lisans
+
+MIT License — [Lisans](LICENSE)
 
 ---
 
 <div align="center">
-
-**Fatrocu CLI v3.1.0** · Rust + ImajeV-2B-Q8_0 · Tamamen Yerel
-
-Made with ♥ by [Nec0ti](https://github.com/Nec0ti)
-
-[GitHub](https://github.com/Nec0ti/Fatrocu) · [PyPI](https://pypi.org/project/fatrocu-cli/)
-
+  <a href="https://github.com/Nec0ti/Fatrocu">github.com/Nec0ti/Fatrocu</a>
 </div>

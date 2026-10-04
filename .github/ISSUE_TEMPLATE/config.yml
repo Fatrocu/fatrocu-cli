@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 🤔 Question
+    about: "If you have a question, please use GitHub Discussions instead of creating an issue."
+    url: https://github.com/Nec0ti/Fatrocu/discussions
+  - name: 📄 Documentation
+    about: "Looking for documentation? Check the docs folder: https://github.com/Nec0ti/Fatrocu/tree/main/docs"
+    url: https://github.com/Nec0ti/Fatrocu/tree/main/docs
+  - name: 💬 Discussions
+    about: "Start a discussion about the project here: https://github.com/Nec0ti/Fatrocu/discussions"
+    url: https://github.com/Nec0ti/Fatrocu/discussions

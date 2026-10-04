@@ -1,0 +1,109 @@
+name: 🐛 Bug Report
+description: Report an issue with Fatrocu CLI
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## Welcome! 💙
+
+        Thanks for taking the time to fill out this bug report! The more detail you provide, the faster we can fix the issue.
+
+  - type: input
+    id: version
+    attributes:
+      label: Fatrocu CLI Version
+      description: "What version are you using?"
+      placeholder: "e.g. v3.1.0"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: "Select your OS and version"
+      placeholder: "e.g. Windows 11 Pro, 64-bit"
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model Used
+      description: "Which model were you using?"
+      placeholder: "e.g. ImajeV-2B-Q8_0"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: "A clear and concise description of the bug."
+      placeholder: "Describe what went wrong..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: "Steps to reproduce the behavior (include environment variables and flags if applicable)"
+      placeholder: |
+        1. Go to '...'
+        2. Click on '...'
+        3. Scroll down to '...'
+        4. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: "A clear and concise description of what you expected to happen."
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: "A clear and concise description of what actually happened."
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshots / Logs
+      description: "If applicable, add screenshots or error logs below."
+      placeholder: "Paste error message or screenshot here..."
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: "Additional environment information that may be relevant."
+      placeholder: |
+        Rust version: rustc 1.79.0 (e.g.)
+        Python version: python 3.11.0
+        GPU: NVIDIA RTX 4090 (or CPU only)
+        RAM: 32GB
+        Disk space available: 100GB
+        llama-cli version: 0.1.4
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: "Add any other context about the problem here."
+      placeholder: "Add any other context about the problem here."
+
+  - type: input
+    id: repro
+    attributes:
+      label: Minimal Reproduction
+      description: "If you have a minimal reproduction case, please include it."
+      placeholder: "Paste your minimal reproduction case here..."

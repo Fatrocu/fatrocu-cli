@@ -24,8 +24,7 @@ enum Commands {
     Process {
         #[arg(short, long)]
         model: Option<String>,
-        #[arg(short, long, default_value = "models/imajeV.gguf")]
-        model_path: String,
+        // model_path has been removed – the binary now always uses the built‑in '--model' flag with the file in the models directory.
         #[arg(short, long)]
         image: String,
         #[arg(short, long, default_value = "sonuc.json")]
@@ -36,7 +35,9 @@ enum Commands {
         threads: usize,
         #[arg(short, long, default_value = "0")]
         gpu_layers: usize,
-        #[arg(short, long, default_value = "2048")]
+        #[arg(short, long, default_value = "256")]
+        ctx_size: usize,
+        #[arg(short, long, default_value = "8")]
         n_predict: usize,
     },
     Models {
@@ -133,7 +134,7 @@ fn print_footer() {
 
 fn run_process(
     model: &str, _model_path: &str, image_path: &str, output: &str,
-    temp: f64, threads: usize, gpu_layers: usize, n_predict: usize,
+    temp: f64, threads: usize, gpu_layers: usize, ctx_size: usize, n_predict: usize,
 ) -> Result<()> {
     println!("\n📄 Fatura İşleme Başlatılıyor...");
     println!("   Model:   {}", model);
@@ -143,29 +144,32 @@ fn run_process(
              temp, threads, gpu_layers, n_predict);
 
     let cli_path = check_cli()?;
-    // Use the downloaded model file in the models directory
-    let model_file = PathBuf::from("models").join(format!("{}.gguf", model));
+    // Use absolute forward‑slash path for the model file – llama‑cli on Windows expects '/' separators
+    let model_file = PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/models").join(format!("{}.gguf", model));
     let output_path = PathBuf::from(output);
-
-    // Build arguments for llama-cli: use model path and optional mmproj
-    let model_path = PathBuf::from("models").join(format!("{}.gguf", model));
     let mut args = vec![
-        "--model-path".to_string(), model_path.to_str().unwrap().to_string(),
+        "--model".to_string(), model_file.to_str().unwrap().to_string(),
         "--image".to_string(), image_path.to_string(),
         "--temp".to_string(), temp.to_string(),
         "--threads".to_string(), threads.to_string(),
         "--gpu-layers".to_string(), gpu_layers.to_string(),
         "--n-predict".to_string(), n_predict.to_string(),
     ];
-    // If a mmproj file exists for this model, add it
-    let mmproj_path = PathBuf::from("models").join(format!("{}-mmproj-f16.gguf", model));
+    // Add optional context size flag (once)
+    if ctx_size > 0 {
+        args.push("--ctx-size".to_string());
+        args.push(ctx_size.to_string());
+    }
+    // Enable low‑vram mode (reduces memory usage on CPU‑only systems)
+    args.push("--low-vram".to_string());
+
+
+    // Use absolute forward‑slash path for the optional mmproj file
+    let mmproj_path = PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/models").join(format!("{}-mmproj-f16.gguf", model));
     if mmproj_path.exists() {
         args.push("--mmproj".to_string());
         args.push(mmproj_path.to_str().unwrap().to_string());
     }
-
-
-    println!("\n   ▶️  İşlem başlatılıyor...\n");
     let start = Instant::now();
 
     let output_file = File::create(&output_path).context("Çıktı dosyası oluşturulamadı")?;
@@ -357,9 +361,10 @@ fn main() -> Result<()> {
     print_header();
     let cli_path = check_cli()?;
     match cli.command {
-        Commands::Process { model, model_path, image, output, temp, threads, gpu_layers, n_predict } => {
+        Commands::Process { model, image, output, temp, threads, gpu_layers, ctx_size, n_predict } => {
             let model = model.unwrap_or_else(|| "ImajeV-2B-Q8_0".to_string());
-            run_process(&model, &model_path, &image, &output, temp, threads, gpu_layers, n_predict)?;
+            // model_path is no longer needed – ignore it completely.
+            run_process(&model, "", &image, &output, temp, threads, gpu_layers, ctx_size, n_predict)?;
         }
         Commands::Models { sub } => run_models_subcommand(sub)?,
         Commands::List => {

@@ -1,12 +1,12 @@
 [package]
-name = "fatrocu-cli"
+name = "fatrocu"
 version = "3.1.0"
 edition = "2021"
 authors = ["Nec0ti <nec0ti@proton.me>"]
-description = "Fatrocu CLI — Moondream 3.1 powered invoice processing"
+description = "Fatrocu CLI — ImajeV-2B powered invoice processing. OCR + extraction in one pass."
 license = "MIT"
 repository = "https://github.com/Nec0ti/Fatrocu"
-keywords = ["invoice", "ocr", "ai", "cli", "moondream"]
+keywords = ["invoice", "ocr", "ai", "cli", "imajev", "extraction"]
 categories = ["command-line-utilities", "document-management"]
 
 [dependencies]
@@ -21,6 +21,15 @@ uuid = { version = "1.10", features = ["v4", "serde"] }
 colored = "2.1"
 anyhow = "1.0"
 thiserror = "1.0"
+anyhow = "1.0"
+zip = "2.1"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
+codegen-units = 1
+panic = "abort"
 
 [[bin]]
 name = "fatrocu"

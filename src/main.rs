@@ -14,7 +14,7 @@ use std::time::Instant;
 #[command(name = "fatrocu")]
 #[command(author = "Nec0ti")]
 #[command(version = "3.1.0")]
-#[command(about = "İmajeV-2B-Q8_0 ile fatura işleme")]
+#[command(about = "ImajeV‑2B‑Q8_0 ile fatura işleme")]
 struct Cli {
     #[command(subcommand)]
     command: Commands,

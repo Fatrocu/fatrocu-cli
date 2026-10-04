@@ -123,9 +123,9 @@ fn check_cli() -> Result<PathBuf> {
 fn print_header() {
     println!(
         "\n╔══════════════════════════════════════════════════════════════╗\n\
-         ║   Fatrocu CLI v3.1.0 — İmajeV-2B-Q8_0                      ║\n\
-         ║   © 2026 Nec0ti — Tüm hakları saklıdır.                     ║\n\
-         ╠══════════════════════════════════════════════════════════════╣\n"
+         ║   Fatrocu CLI v3.1.0 — ImajeV‑2B‑Q8_0                      ║\n\
+         ║   © 2026 Nec0ti — All rights reserved.                     ║\n\
+         ╠══════════════════════════════════════════════════════════════╣\n");
     );
 }
 
@@ -137,7 +137,7 @@ fn run_process(
     model: &str, _model_path: &str, image_path: &str, output: &str,
     temp: f64, threads: usize, gpu_layers: usize, ctx_size: usize, n_predict: usize,
 ) -> Result<()> {
-    println!("\n📄 Fatura İşleme Başlatılıyor...");
+    println!("\n📄 Invoice processing started...");
     println!("   Model:   {}", model);
     println!("   Dosya:   {}", image_path);
     println!("   Çıktı:   {}", output);
@@ -405,7 +405,7 @@ fn main() -> Result<()> {
             let mut report = HashMap::new();
             report.insert("tarih", Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
             report.insert("sistem", "Fatrocu CLI v3.1.0".to_string());
-            report.insert("model", "İmajeV-2B-Q8_0".to_string());
+            report.insert("model", "ImajeV‑2B‑Q8_0".to_string());
             let args: Vec<String> = std::env::args().collect();
             report.insert("komut", args.join(" ").to_string());
             let json = serde_json::to_string_pretty(&report)?;

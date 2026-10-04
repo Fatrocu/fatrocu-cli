@@ -1,0 +1,27 @@
+[package]
+name = "fatrocu-cli"
+version = "3.1.0"
+edition = "2021"
+authors = ["Nec0ti <nec0ti@proton.me>"]
+description = "Fatrocu CLI — Moondream 3.1 powered invoice processing"
+license = "MIT"
+repository = "https://github.com/Nec0ti/Fatrocu"
+keywords = ["invoice", "ocr", "ai", "cli", "moondream"]
+categories = ["command-line-utilities", "document-management"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.40", features = ["full"] }
+reqwest = { version = "0.12", features = ["json", "blocking"], default-features = false }
+dirs = "5.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+colored = "2.1"
+anyhow = "1.0"
+thiserror = "1.0"
+
+[[bin]]
+name = "fatrocu"
+path = "src/main.rs"

@@ -2,7 +2,8 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand, ValueEnum};
 use chrono::Local;
 use std::collections::HashMap;
-use std::fs::File;
+use std::env;
+
 use std::io::BufWriter;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -155,16 +156,38 @@ fn run_process(
         "--gpu-layers".to_string(), gpu_layers.to_string(),
         "--n-predict".to_string(), n_predict.to_string(),
     ];
+    // If a fatrocu-server URL is provided, POST the request there instead of invoking llama-cli locally
+    if let Ok(server_url) = env::var("FATROCU_SERVER_URL") {
+        // Build multipart POST using curl (available via MSYS on Windows)
+        let mut curl_cmd = Command::new("curl");
+        curl_cmd.args(&[
+            "-X", "POST",
+            "-F", &format!("image=@{}", image_path),
+            "-F", &format!("model={}", model),
+            "-F", &format!("temp={}", temp),
+            "-F", &format!("n_predict={}", n_predict),
+            "-F", &format!("ctx_size={}", ctx_size),
+            &format!("{}/process", server_url),
+        ]);
+        let output = curl_cmd.output().context("failed to call fatrocu-server")?;
+        if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            return Err(anyhow::anyhow!("Server call failed: {}", err));
+        }
+        // Write server JSON response directly to the output file
+        std::fs::write(&output_path, &output.stdout)?;
+        println!("✅ Server response saved to {}", output_path.display());
+        return Ok(());
+    }
     // Add optional context size flag (once)
     if ctx_size > 0 {
         args.push("--ctx-size".to_string());
         args.push(ctx_size.to_string());
     }
-    // Enable low‑vram mode (reduces memory usage on CPU‑only systems)
+
+
+    // Enable low‑vram to reduce memory on CPU‑only systems
     args.push("--low-vram".to_string());
-
-
-    // Use absolute forward‑slash path for the optional mmproj file
     let mmproj_path = PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/models").join(format!("{}-mmproj-f16.gguf", model));
     if mmproj_path.exists() {
         args.push("--mmproj".to_string());

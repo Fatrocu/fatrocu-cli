@@ -132,7 +132,7 @@ fn print_footer() {
 }
 
 fn run_process(
-    model: &str, model_path: &str, image_path: &str, output: &str,
+    model: &str, _model_path: &str, image_path: &str, output: &str,
     temp: f64, threads: usize, gpu_layers: usize, n_predict: usize,
 ) -> Result<()> {
     println!("\n📄 Fatura İşleme Başlatılıyor...");
@@ -143,11 +143,13 @@ fn run_process(
              temp, threads, gpu_layers, n_predict);
 
     let cli_path = check_cli()?;
-    let model_path = PathBuf::from(model_path);
+    // Use the downloaded model file in the models directory
+    let model_file = PathBuf::from("models").join(format!("{}.gguf", model));
     let output_path = PathBuf::from(output);
 
-    let args = vec![
-        "--model".to_string(), model.to_string(),
+    // Build arguments for llama-cli: use model path and optional mmproj
+    let model_path = PathBuf::from("models").join(format!("{}.gguf", model));
+    let mut args = vec![
         "--model-path".to_string(), model_path.to_str().unwrap().to_string(),
         "--image".to_string(), image_path.to_string(),
         "--temp".to_string(), temp.to_string(),
@@ -155,6 +157,13 @@ fn run_process(
         "--gpu-layers".to_string(), gpu_layers.to_string(),
         "--n-predict".to_string(), n_predict.to_string(),
     ];
+    // If a mmproj file exists for this model, add it
+    let mmproj_path = PathBuf::from("models").join(format!("{}-mmproj-f16.gguf", model));
+    if mmproj_path.exists() {
+        args.push("--mmproj".to_string());
+        args.push(mmproj_path.to_str().unwrap().to_string());
+    }
+
 
     println!("\n   ▶️  İşlem başlatılıyor...\n");
     let start = Instant::now();
@@ -219,11 +228,31 @@ fn run_process(
 fn run_models_subcommand(sub: ModelSubcommand) -> Result<()> {
     println!("\n📦 Model Yönetimi");
     let cli_path = check_cli()?;
-    let sub_name = match sub {
-        ModelSubcommand::Download { model, output } => format!("models --download \"{}\" --output {}", model, output),
-        ModelSubcommand::Remove { model } => format!("models --remove \"{}\"", model),
+    let args = match sub {
+        ModelSubcommand::Download { model, output } => {
+            // Ensure the output directory exists (output defaults to "models")
+            let out_dir = std::path::Path::new(&output);
+            std::fs::create_dir_all(out_dir).ok();
+            let out_file = out_dir.join(format!("{}.gguf", model));
+            // Construct Hugging Face download URL (model file assumed to be <model>.gguf)
+            let url = format!("https://huggingface.co/nec0ti/{}/resolve/main/{}.gguf", model, model);
+            println!("Downloading model from {}...", url);
+            let status = std::process::Command::new("curl")
+                .args(&["-L", "-H", &format!("Authorization: Bearer {}", std::env::var("HF_TOKEN").unwrap_or_default()), "-o", out_file.to_str().unwrap(), &url])
+                .status()?;
+            if !status.success() {
+                return Err(anyhow::anyhow!("Failed to download model {}", model));
+            }
+            println!("✅ Model downloaded to {}", out_file.display());
+            return Ok(());
+        },
+        ModelSubcommand::Remove { model } => vec![
+            "remove".to_string(),
+            model.clone(),
+        ],
     };
-    let output = Command::new(&cli_path).arg("models").arg(sub_name).output()?;
+    // For non-download subcommands, forward to llama-cli
+    let output = std::process::Command::new(&cli_path).args(&args).output()?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         println!("   ❌ Hata: {}", stderr);

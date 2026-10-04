@@ -108,8 +108,15 @@ fn get_cli_path() -> PathBuf {
     let appdata_path = std::env::var("APPDATA").unwrap_or_else(|_| "C:/Users/PC/Desktop/fatrocu-cli".to_string());
     let appdata_exe = PathBuf::from(appdata_path).join(exe);
     if appdata_exe.exists() { return appdata_exe; }
-    println!("\n⚠️  llama-cli.exe bulunamadı! İndirme:\nhttps://huggingface.co/cjhb/llama-cli-windows/releases/download/v2.5.0/llama-cli.exe\n");
-    PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/llama-cli.exe")
+            println!("\n⚠️  llama-cli.exe not found. Downloading...\n");
+            // Download llama-cli.exe from HuggingFace
+            let url = "https://huggingface.co/cjhb/llama-cli-windows/releases/download/v2.5.0/llama-cli.exe";
+            let status = Command::new("curl").args(&["-L", "-o", "C:/Users/PC/Desktop/fatrocu-cli/llama-cli.exe", url]).status()?;
+            if !status.success() { return Err(anyhow::anyhow!("Failed to download llama-cli.exe")); }
+            println!("✅ llama-cli.exe downloaded.");
+            let downloaded = PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/llama-cli.exe");
+            return Ok(downloaded);
+
 }
 
 fn check_cli() -> Result<PathBuf> {
@@ -139,8 +146,8 @@ fn run_process(
 ) -> Result<()> {
     println!("\n📄 Invoice processing started...");
     println!("   Model:   {}", model);
-    println!("   Dosya:   {}", image_path);
-    println!("   Çıktı:   {}", output);
+    println!("   File:   {}", image_path);
+    println!("   Output: {}", output);
     println!("   Temp:     {}, Threads: {}, GPU Layers: {}, N-Predict: {}",
              temp, threads, gpu_layers, n_predict);
 
@@ -295,7 +302,7 @@ fn run_models_subcommand(sub: ModelSubcommand) -> Result<()> {
 fn run_export(format: ExportFormat, output: &str, status: &str, header: &str) -> Result<()> {
     println!("\n📊 Export Başlatılıyor...");
     println!("   Format:  {:?}", format);
-    println!("   Dosya:   {}", output);
+    println!("   File:   {}", output);
     println!("   Durum:   {}", status);
     println!("   Başlık:  {}", header);
 

@@ -1,53 +1,29 @@
-# Pull Request Template
+# Fatrocu 3.1 Pull Request
 
-## Description
+## Change and reason
 
-<!--- Describe your changes in detail. Explain what problem you are solving and why. -->
+## Tests run
 
-## Type of Change
+## Local benchmark
 
-- [ ] Bug fix (non-breaking change which fixes an issue)
-- [ ] New feature (non-breaking change which adds functionality)
-- [ ] Breaking change (fix or feature that would cause existing functionality to change)
-- [ ] Documentation update
-- [ ] Performance improvement
+- Dataset manifest/version:
+- Model ID/revision:
+- e-Archive field exact match:
+- e-Archive critical field exact match:
+- e-Archive exact-document score:
+- OKC field exact match:
+- OKC critical field exact match:
+- OKC exact-document score:
+- Gate: pass/fail
+
+## Privacy check
+
+Confirm source financial documents, API keys, and raw telemetry are absent from the commit and PR artifacts.
 
 ## Checklist
 
-- [ ] My code follows the project's style guidelines
-- [ ] I have added tests for my changes (if applicable)
-- [ ] All existing tests pass
-- [ ] I have updated the documentation accordingly
-- [ ] I have added comments to complex code sections
-- [ ] I have updated the CHANGELOG.md
-
-## Screenshots / Demo
-
-<!-- If applicable, add screenshots or a demo video -->
-
-## Related Issues
-
-<!-- Reference any related issues: Closes #123, Fixes #456 -->
-
-## Additional Context
-
-<!-- Add any other context about the PR here. If it fixes a bug, link to the issue. -->
-
-## Testing Performed
-
-<!-- Describe the testing you have performed: -->
-- [ ] Manual testing completed
-- [ ] Edge cases considered
-- [ ] Performance tested (if applicable)
-
-## Known Issues
-
-<!-- List any known issues or TODOs -->
-
-## Performance Impact
-
-<!-- If applicable, describe the performance impact of this change -->
-
----
-
-**Note:** By submitting this pull request, you agree to license your contributions under the MIT License.
+- [ ] Separate worktree and branch used
+- [ ] Focused tests pass
+- [ ] benchmarks.md thresholds pass before PR
+- [ ] Documentation updated
+- [ ] No unredacted financial or personal data included

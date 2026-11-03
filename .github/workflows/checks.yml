@@ -1,0 +1,23 @@
+name: Rust checks
+on:
+  pull_request:
+  push:
+    branches: ['codex/**']
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo test --locked --all-targets
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - name: Private accuracy gate remains local
+        run: echo "Run benchmarks.md locally after dataset readiness. CI synthetic tests do not pass that gate."

@@ -1,451 +1,474 @@
-use anyhow::{Context, Result};
-use clap::{Parser, Subcommand, ValueEnum};
-use chrono::Local;
-use std::collections::HashMap;
-use std::env;
-
-use std::io::BufWriter;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
-use serde::{Deserialize, Serialize};
-use std::time::Instant;
+use anyhow::{Context, Result, ensure};
+use clap::{Parser, Subcommand};
+use fatrocu_core::{
+    benchmark,
+    export::{self, ExportFormat},
+    extraction,
+    inference::Endpoint,
+    model::*,
+    storage::{self, Settings, Store},
+    update,
+};
+use std::{collections::BTreeMap, path::PathBuf};
 
 #[derive(Parser)]
-#[command(name = "fatrocu")]
-#[command(author = "Nec0ti")]
-#[command(version = "3.1.0")]
-#[command(about = "ImajeV‑2B‑Q8_0 ile fatura işleme")]
+#[command(
+    name = "fatrocu-cli",
+    version,
+    about = "Local financial document extraction, human review and export"
+)]
 struct Cli {
+    #[arg(long, env = "FATROCU_DATA_DIR", global = true)]
+    data_dir: Option<PathBuf>,
     #[command(subcommand)]
     command: Commands,
 }
-
 #[derive(Subcommand)]
 enum Commands {
-    Process {
-        #[arg(short, long)]
-        model: Option<String>,
-        // model_path has been removed – the binary now always uses the built‑in '--model' flag with the file in the models directory.
-        #[arg(short, long)]
-        image: String,
-        #[arg(short, long, default_value = "sonuc.json")]
-        output: String,
-        #[arg(short, long, default_value = "0.2")]
-        temp: f64,
-        #[arg(short, long, default_value = "4")]
-        threads: usize,
-        #[arg(short, long, default_value = "0")]
-        gpu_layers: usize,
-        #[arg(short, long, default_value = "256")]
-        ctx_size: usize,
-        #[arg(short, long, default_value = "8")]
-        n_predict: usize,
-    },
-    Models {
+    /// Manage taxpayer profiles. Select a profile explicitly for every import.
+    Profile {
         #[command(subcommand)]
-        sub: ModelSubcommand,
+        action: Profiles,
     },
-    #[command(name = "list")]
-    List,
-    #[command(name = "status")]
-    Status,
+    /// List built-in templates or add a custom template JSON definition.
+    Template {
+        #[command(subcommand)]
+        action: Templates,
+    },
+    /// Extract and retain documents locally for review. Never auto-approves.
+    Process {
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        #[arg(long)]
+        profile: String,
+        #[arg(long, default_value = "e_archive")]
+        template: String,
+        #[arg(long, value_enum, default_value = "e-archive")]
+        kind: DocumentKind,
+        #[arg(long)]
+        endpoint: Option<String>,
+        #[arg(long)]
+        model: Option<String>,
+        /// Authorize sending document contents to the specified external endpoint.
+        #[arg(long)]
+        allow_remote_document_transfer: bool,
+        /// Import deterministic results or blank review records without inference.
+        #[arg(long)]
+        no_model: bool,
+        #[arg(long)]
+        no_merge_taxes: bool,
+    },
+    /// List persisted documents as JSON.
+    List {
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long)]
+        approved: bool,
+    },
+    /// Show the full review record and validation issues.
+    Show {
+        id: String,
+    },
+    /// Save human corrections; requires the revision returned by show.
+    Review {
+        id: String,
+        #[arg(long)]
+        revision: u64,
+        #[arg(long = "set")]
+        fields: Vec<String>,
+        #[arg(long)]
+        taxes: Option<PathBuf>,
+        #[arg(long)]
+        input: Option<PathBuf>,
+        #[arg(long)]
+        merge_taxes: Option<bool>,
+    },
+    /// Approve one reviewed document, optionally acknowledging specific missing fields.
+    Approve {
+        id: String,
+        #[arg(long)]
+        revision: u64,
+        #[arg(long = "acknowledge-missing")]
+        acknowledge: Vec<String>,
+    },
+    Reopen {
+        id: String,
+        #[arg(long)]
+        revision: u64,
+    },
+    /// Permanently delete the locally retained document and work record.
+    Delete {
+        id: String,
+        #[arg(long)]
+        revision: u64,
+    },
     Export {
-        #[arg(short, long, value_enum, default_value = "xlsx")]
-        format: ExportFormat,
-        #[arg(short, long, default_value = "Fatrocu_Raporu.xlsx")]
-        output: String,
-        #[arg(long, default_value = "reviewed")]
-        status: String,
-        #[arg(long, default_value = "Fatura")]
-        header: String,
+        #[arg(long)]
+        output: PathBuf,
+        #[arg(long, value_enum)]
+        format: Option<ExportFormat>,
+        #[arg(long)]
+        profile: Option<String>,
+        #[arg(long = "id")]
+        ids: Vec<String>,
     },
-    Report {
-        #[arg(short, long, default_value = "rapor_2026-10-06.json")]
-        output: String,
+    Settings {
+        #[command(subcommand)]
+        action: SettingAction,
     },
-    #[command(name = "version")]
-    Version,
-    #[command(name = "help")]
-    Help,
+    Backup {
+        destination: PathBuf,
+    },
+    /// Local extraction accuracy gate. Only run after dataset readiness is confirmed.
+    Benchmark {
+        #[arg(long, env = "FATROCU_BENCHMARK_DATA")]
+        dataset: PathBuf,
+        #[arg(long)]
+        report: PathBuf,
+        #[arg(long)]
+        commit: String,
+    },
+    /// Check published stable releases; installation requires digest and publisher verification.
+    Update {
+        #[arg(long)]
+        install: bool,
+    },
+    /// Check the configured HTTP/OpenAI-compatible model connection without documents.
+    ConnectionCheck,
+    /// Print a blank extraction schema for integrations and ground-truth preparation.
+    Schema {
+        #[arg(long, value_enum, default_value = "e-archive")]
+        kind: DocumentKind,
+    },
 }
-
 #[derive(Subcommand)]
-enum ModelSubcommand {
-    Download {
-        model: String,
-        #[arg(short, long, default_value = "models")]
-        output: String,
+enum Profiles {
+    List,
+    Add {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        tax_id: String,
     },
-    Remove {
-        model: String,
+    Rename {
+        id: String,
+        #[arg(long)]
+        name: String,
+    },
+    Delete {
+        id: String,
     },
 }
-
-#[derive(ValueEnum, Clone, Debug, PartialEq)]
-enum ExportFormat {
-    Xlsx,
-    Csv,
-    Json,
+#[derive(Subcommand)]
+enum Templates {
+    List,
+    Add { file: PathBuf },
 }
-
-fn get_model_path(model: &str) -> PathBuf {
-    let path = std::env::var("FATROCU_MODEL_PATH").unwrap_or_else(|_| "models".to_string());
-    PathBuf::from(path).join(model)
+#[derive(Subcommand)]
+enum SettingAction {
+    Show,
+    Set {
+        #[arg(long)]
+        telemetry: Option<bool>,
+        #[arg(long)]
+        endpoint: Option<String>,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        api_key_env: Option<String>,
+        #[arg(long, value_enum)]
+        protocol: Option<fatrocu_core::inference::Protocol>,
+        #[arg(long)]
+        default_export: Option<String>,
+    },
 }
-
-fn get_cli_path() -> PathBuf {
-    let exe = std::env::current_exe()
-        .expect("Cannot get current executable path")
-        .file_name()
-        .map(|s| s.to_string_lossy().to_string())
-        .unwrap_or_else(|| "llama-cli.exe".to_string());
-    let exe = exe.trim_end_matches(".exe");
-    let current_exe = std::env::current_dir().unwrap_or_default();
-    let current_path = current_exe.join(exe);
-    if current_path.exists() { return current_path; }
-    let default_path = PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/llama-cli.exe");
-    if default_path.exists() { return default_path; }
-    let appdata_path = std::env::var("APPDATA").unwrap_or_else(|_| "C:/Users/PC/Desktop/fatrocu-cli".to_string());
-    let appdata_exe = PathBuf::from(appdata_path).join(exe);
-    if appdata_exe.exists() { return appdata_exe; }
-            println!("\n⚠️  llama-cli.exe not found. Downloading...\n");
-            // Download llama-cli.exe from HuggingFace
-            let url = "https://huggingface.co/cjhb/llama-cli-windows/releases/download/v2.5.0/llama-cli.exe";
-            let status = Command::new("curl").args(&["-L", "-o", "C:/Users/PC/Desktop/fatrocu-cli/llama-cli.exe", url]).status()?;
-            if !status.success() { return Err(anyhow::anyhow!("Failed to download llama-cli.exe")); }
-            println!("✅ llama-cli.exe downloaded.");
-            let downloaded = PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/llama-cli.exe");
-            return Ok(downloaded);
-
-}
-
-fn check_cli() -> Result<PathBuf> {
-    let cli_path = get_cli_path();
-    if !cli_path.exists() {
-        return Err(anyhow::anyhow!("llama-cli.exe bulunamadı: {:?}", cli_path));
-    }
-    Ok(cli_path)
-}
-
-fn print_header() {
-    println!(
-        "\n╔══════════════════════════════════════════════════════════════╗\n\
-         ║   Fatrocu CLI v3.1.0 — ImajeV‑2B‑Q8_0                      ║\n\
-         ║   © 2026 Nec0ti — All rights reserved.                     ║\n\
-         ╠══════════════════════════════════════════════════════════════╣\n");
-    );
-}
-
-fn print_footer() {
-    println!("╚══════════════════════════════════════════════════════════════╝");
-}
-
-fn run_process(
-    model: &str, _model_path: &str, image_path: &str, output: &str,
-    temp: f64, threads: usize, gpu_layers: usize, ctx_size: usize, n_predict: usize,
-) -> Result<()> {
-    println!("\n📄 Invoice processing started...");
-    println!("   Model:   {}", model);
-    println!("   File:   {}", image_path);
-    println!("   Output: {}", output);
-    println!("   Temp:     {}, Threads: {}, GPU Layers: {}, N-Predict: {}",
-             temp, threads, gpu_layers, n_predict);
-
-    let cli_path = check_cli()?;
-    // Use absolute forward‑slash path for the model file – llama‑cli on Windows expects '/' separators
-    let model_file = PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/models").join(format!("{}.gguf", model));
-    let output_path = PathBuf::from(output);
-    let mut args = vec![
-        "--model".to_string(), model_file.to_str().unwrap().to_string(),
-        "--image".to_string(), image_path.to_string(),
-        "--temp".to_string(), temp.to_string(),
-        "--threads".to_string(), threads.to_string(),
-        "--gpu-layers".to_string(), gpu_layers.to_string(),
-        "--n-predict".to_string(), n_predict.to_string(),
-    ];
-    // If a fatrocu-server URL is provided, POST the request there instead of invoking llama-cli locally
-    if let Ok(server_url) = env::var("FATROCU_SERVER_URL") {
-        // Build multipart POST using curl (available via MSYS on Windows)
-        let mut curl_cmd = Command::new("curl");
-        curl_cmd.args(&[
-            "-X", "POST",
-            "-F", &format!("image=@{}", image_path),
-            "-F", &format!("model={}", model),
-            "-F", &format!("temp={}", temp),
-            "-F", &format!("n_predict={}", n_predict),
-            "-F", &format!("ctx_size={}", ctx_size),
-            &format!("{}/process", server_url),
-        ]);
-        let output = curl_cmd.output().context("failed to call fatrocu-server")?;
-        if !output.status.success() {
-            let err = String::from_utf8_lossy(&output.stderr);
-            return Err(anyhow::anyhow!("Server call failed: {}", err));
-        }
-        // Write server JSON response directly to the output file
-        std::fs::write(&output_path, &output.stdout)?;
-        println!("✅ Server response saved to {}", output_path.display());
-        return Ok(());
-    }
-    // Add optional context size flag (once)
-    if ctx_size > 0 {
-        args.push("--ctx-size".to_string());
-        args.push(ctx_size.to_string());
-    }
-
-
-    // Enable low‑vram to reduce memory on CPU‑only systems
-    args.push("--low-vram".to_string());
-    let mmproj_path = PathBuf::from("C:/Users/PC/Desktop/fatrocu-cli/models").join(format!("{}-mmproj-f16.gguf", model));
-    if mmproj_path.exists() {
-        args.push("--mmproj".to_string());
-        args.push(mmproj_path.to_str().unwrap().to_string());
-    }
-    let start = Instant::now();
-
-    let output_file = File::create(&output_path).context("Çıktı dosyası oluşturulamadı")?;
-    let mut writer = BufWriter::new(output_file);
-
-    let output = Command::new(&cli_path)
-        .args(&args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .context("llama-cli çalıştırılamadı")?;
-
-    let elapsed = start.elapsed();
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        println!("\n   ❌ İşlem başarısız: {}\n   Çıktı: {}", stderr, output.status);
-        return Err(anyhow::anyhow!("İşlem başarısız: {}", stderr));
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    println!("   ✅ İşlem tamamlandı! Süre: {:?}\n", elapsed);
-    println!("   ▶️  JSON parse ediliyor...\n");
-
-    let result: Vec<ProcessedDocument> = match serde_json::from_str(&stdout) {
-        Ok(docs) => docs,
-        Err(e) => {
-            println!("   ⚠️  JSON parse hatası: {}", e);
-            let lines: Vec<&str> = stdout.lines().filter(|l| !l.trim().is_empty()).collect();
-            let mut result = Vec::new();
-            for line in lines {
-                if let Ok(doc) = serde_json::from_str::<ProcessedDocument>(line) {
-                    result.push(doc);
-                }
-            }
-            result
-        }
-    };
-
-    if result.is_empty() {
-        println!("   ⚠️  Hiçbir fatura bulunamadı");
-        std::fs::write(&output_path, stdout.to_string())?;
-        return Ok(());
-    }
-
-    for doc in &result {
-        println!(
-            "   [+] Sayfa {}: {} — {} TL",
-            doc.page.unwrap_or(0) + 1,
-            doc.fatura_no.as_deref().unwrap_or("N/A"),
-            doc.genel_toplam.as_deref().unwrap_or("0.00")
-        );
-    }
-
-    println!("   ✅ {} fatura işlendi", result.len());
-    std::fs::write(&output_path, stdout.to_string())?;
+fn print(value: &impl serde::Serialize) -> Result<()> {
+    println!("{}", serde_json::to_string_pretty(value)?);
     Ok(())
 }
-
-fn run_models_subcommand(sub: ModelSubcommand) -> Result<()> {
-    println!("\n📦 Model Yönetimi");
-    let cli_path = check_cli()?;
-    let args = match sub {
-        ModelSubcommand::Download { model, output } => {
-            // Ensure the output directory exists (output defaults to "models")
-            let out_dir = std::path::Path::new(&output);
-            std::fs::create_dir_all(out_dir).ok();
-            let out_file = out_dir.join(format!("{}.gguf", model));
-            // Construct Hugging Face download URL (model file assumed to be <model>.gguf)
-            let url = format!("https://huggingface.co/nec0ti/{}/resolve/main/{}.gguf", model, model);
-            println!("Downloading model from {}...", url);
-            let status = std::process::Command::new("curl")
-                .args(&["-L", "-H", &format!("Authorization: Bearer {}", std::env::var("HF_TOKEN").unwrap_or_default()), "-o", out_file.to_str().unwrap(), &url])
-                .status()?;
-            if !status.success() {
-                return Err(anyhow::anyhow!("Failed to download model {}", model));
-            }
-            println!("✅ Model downloaded to {}", out_file.display());
-            return Ok(());
-        },
-        ModelSubcommand::Remove { model } => vec![
-            "remove".to_string(),
-            model.clone(),
-        ],
-    };
-    // For non-download subcommands, forward to llama-cli
-    let output = std::process::Command::new(&cli_path).args(&args).output()?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        println!("   ❌ Hata: {}", stderr);
-        return Err(anyhow::anyhow!("{}", stderr));
+fn startup(root: PathBuf) {
+    if std::env::var_os("FATROCU_NO_UPDATE_CHECK").is_some() {
+        return;
     }
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    println!("{}", stdout);
-    Ok(())
-}
-
-
-
-fn run_export(format: ExportFormat, output: &str, status: &str, header: &str) -> Result<()> {
-    println!("\n📊 Export Başlatılıyor...");
-    println!("   Format:  {:?}", format);
-    println!("   File:   {}", output);
-    println!("   Durum:   {}", status);
-    println!("   Başlık:  {}", header);
-
-    let cli_path = check_cli()?;
-    let output_path = PathBuf::from(output);
-
-    if output_path.exists() {
-        let content = std::fs::read_to_string(&output_path)?;
-        let data: Vec<ProcessedDocument> = serde_json::from_str(&content).unwrap_or_else(|_| Vec::new());
-        let mut rows = Vec::new();
-        for doc in data {
-            rows.push(vec![
-                doc.fatura_no.unwrap_or_else(|| "N/A".to_string()),
-                doc.fatura_tarihi.unwrap_or_else(|| "N/A".to_string()),
-                doc.cari_unvan.unwrap_or_else(|| "N/A".to_string()),
-                doc.cari_vergi_no.unwrap_or_else(|| "N/A".to_string()),
-                doc.ettn_uuid.unwrap_or_else(|| "N/A".to_string()),
-                doc.mal_hizmet_toplam_matrah.unwrap_or_else(|| "0.00".to_string()),
-                doc.kdv_orani.unwrap_or_else(|| "0".to_string()),
-                doc.kdv_tutari.unwrap_or_else(|| "0.00".to_string()),
-                doc.genel_toplam.unwrap_or_else(|| "0.00".to_string()),
-                doc.kalemler.iter().map(|k| {
-                    let ad = k.ad.as_ref().map(|s| s.as_str()).unwrap_or("N/A");
-                    let miktar = k.miktar.as_ref().map(|s| s.as_str()).unwrap_or("0.00");
-                    let birim_fiyat = k.birim_fiyat.as_ref().map(|s| s.as_str()).unwrap_or("0.00");
-                    let toplam = k.toplam.as_ref().map(|s| s.as_str()).unwrap_or("0.00");
-                    format!("{}|{}|{}|{}|{} TL", ad, miktar, birim_fiyat, toplam, k.ad.as_ref().map(|s| s.as_str()).unwrap_or("N/A"))
-                }).collect::<Vec<_>>().join(";"),
-            ]);
-        }
-
-        if format == ExportFormat::Xlsx {
-            let filename = output_path.file_name().unwrap_or_default().to_str().unwrap_or("Fatrocu_Raporu.xlsx");
-            println!("   ✅ Excel export (skribo kullanılamıyordu, CSV kullanılıyor)");
-            if let Ok(f) = File::create(&output_path) {
-                let mut writer = csv::Writer::from_writer(f);
-                writer.write_record(&["Fatura No", "Fatura Tarihi", "Kari Ünvan", "Kari Vergi No",
-                    "ETTN UUID", "Mal/Hizmet Toplam Matrah", "KDV Oranı", "KDV Tutarı",
-                    "Genel Toplam", "Kalemler"])?;
-                for row in rows { writer.write_record(row)?; }
-                writer.flush()?;
-            }
-            println!("   ✅ CSV dosyası oluşturuldu: {}", filename);
-        } else if format == ExportFormat::Csv {
-            let f = File::create(&output_path).context("Dosya oluşturulamadı")?;
-            let mut writer = csv::Writer::from_writer(f);
-            for row in rows { writer.write_record(row)?; }
-            writer.flush()?;
-            println!("   ✅ CSV dosyası oluşturuldu: {}", output);
-        } else {
-            println!("   ✅ JSON çıktı: {}", output);
-        }
-    } else {
-        println!("   ⚠️  Çıktı dosyası bulunamadı: {}", output);
-    }
-    Ok(())
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct ProcessedDocument {
-    page: Option<usize>,
-    fatura_no: Option<String>,
-    fatura_tarihi: Option<String>,
-    cari_unvan: Option<String>,
-    cari_vergi_no: Option<String>,
-    ettn_uuid: Option<String>,
-    mal_hizmet_toplam_matrah: Option<String>,
-    kdv_orani: Option<String>,
-    kdv_tutari: Option<String>,
-    genel_toplam: Option<String>,
-    kalemler: Vec<LineItem>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-struct LineItem {
-    ad: Option<String>,
-    miktar: Option<String>,
-    birim_fiyat: Option<String>,
-    toplam: Option<String>,
-}
-
-
-
-fn main() -> Result<()> {
-    let cli = Cli::parse();
-    print_header();
-    let cli_path = check_cli()?;
-    match cli.command {
-        Commands::Process { model, image, output, temp, threads, gpu_layers, ctx_size, n_predict } => {
-            let model = model.unwrap_or_else(|| "ImajeV-2B-Q8_0".to_string());
-            // model_path is no longer needed – ignore it completely.
-            run_process(&model, "", &image, &output, temp, threads, gpu_layers, ctx_size, n_predict)?;
-        }
-        Commands::Models { sub } => run_models_subcommand(sub)?,
-        Commands::List => {
-            let output = Command::new(&cli_path).arg("models --list").output()?;
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            println!("{}", stdout);
-        }
-        Commands::Status => {
-            let output = Command::new(&cli_path).arg("status").output()?;
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            println!("{}", stdout);
-        }
-        Commands::Export { format, output, status, header } => run_export(format, &output, &status, &header)?,
-        Commands::Report { output } => {
-            let mut report = HashMap::new();
-            report.insert("tarih", Local::now().format("%Y-%m-%d %H:%M:%S").to_string());
-            report.insert("sistem", "Fatrocu CLI v3.1.0".to_string());
-            report.insert("model", "ImajeV‑2B‑Q8_0".to_string());
-            let args: Vec<String> = std::env::args().collect();
-            report.insert("komut", args.join(" ").to_string());
-            let json = serde_json::to_string_pretty(&report)?;
-            std::fs::write(&output, &json)?;
-            println!("✅ Rapor kaydedildi: {}", output);
-        }
-        Commands::Version => println!("fatrocu-cli v3.1.0 (c) 2026 Nec0ti"),
-        Commands::Help => {
-            println!(
-                "
-KULLANIM: fatrocu <komut> [seçenekler]
-
-KOMUTLAR:
-  process    Fatura işleme
-  models     Model yönetimi (download, remove)
-  list       Model listesi
-  status     Motor durumu
-  export     Excel/CSV export
-  report     Hata raporu
-  version    Sürüm bilgisi
-  help       Bu mesaj
-
-ÖRNEKLER:
-  fatrocu process --model \"ImajeV-2B-Q8_0\" --image invoice.pdf --output result.json
-  fatrocu models --download \"ImajeV-2B-Q8_0\"
-  fatrocu models --list
-  fatrocu status
-  fatrocu export --format csv --output rapor.csv
-"
+    std::thread::spawn(move || {
+        if let Ok(release) = update::check("fatrocu-cli", &root.join("updates"), false)
+            && update::newer(&release, env!("CARGO_PKG_VERSION")).unwrap_or(false)
+        {
+            eprintln!(
+                "Fatrocu CLI {} is available. Run fatrocu-cli update for release notes.",
+                release.tag_name
             );
         }
+    });
+}
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("Error: {error:#}");
+        std::process::exit(1);
     }
-    print_footer();
+}
+fn run() -> Result<()> {
+    let cli = Cli::parse();
+    let root = cli
+        .data_dir
+        .map(Ok)
+        .unwrap_or_else(storage::default_data_dir)?;
+    startup(root.clone());
+    let mut store = Store::open(root)?;
+    match cli.command {
+        Commands::Profile { action } => match action {
+            Profiles::List => print(&store.profiles()?)?,
+            Profiles::Add { name, tax_id } => {
+                let p = Profile::new(name, tax_id)?;
+                store.save_profile(&p)?;
+                print(&p)?;
+            }
+            Profiles::Rename { id, name } => {
+                let mut p = store.profile(&id)?;
+                p.legal_name = name;
+                store.save_profile(&p)?;
+                print(&p)?;
+            }
+            Profiles::Delete { id } => store.delete_profile(&id)?,
+        },
+        Commands::Template { action } => match action {
+            Templates::List => print(&store.templates()?)?,
+            Templates::Add { file } => {
+                let t: Template = serde_json::from_slice(&std::fs::read(file)?)?;
+                store.save_template(&t)?;
+                print(&t)?;
+            }
+        },
+        Commands::Process {
+            files,
+            profile,
+            template,
+            kind,
+            endpoint,
+            model,
+            allow_remote_document_transfer,
+            no_model,
+            no_merge_taxes,
+        } => {
+            let profile = store.profile(&profile)?;
+            let template = store.template(&template)?;
+            let mut connection = store.settings()?.endpoint;
+            if let Some(url) = endpoint {
+                connection.url = url;
+            }
+            if let Some(model) = model {
+                connection.model = model;
+            }
+            if connection.is_remote() && !no_model {
+                eprintln!("{}", connection.disclosure());
+                connection.authorize(allow_remote_document_transfer)?;
+            }
+            let mut result = vec![];
+            let mut failed = false;
+            for file in files {
+                match extraction::extract(
+                    &file,
+                    &profile,
+                    &template,
+                    kind,
+                    &connection,
+                    allow_remote_document_transfer,
+                    !no_model,
+                )
+                .and_then(|mut d| {
+                    d.merge_taxes = !no_merge_taxes;
+                    store.import(&file, d)
+                }) {
+                    Ok(d) => result.push(serde_json::json!({"document":d,"success":true})),
+                    Err(err) => {
+                        failed = true;
+                        result
+                            .push(serde_json::json!({"success":false,"error":format!("{err:#}")}));
+                    }
+                }
+            }
+            print(&result)?;
+            ensure!(!failed, "One or more documents could not be imported");
+        }
+        Commands::List { profile, approved } => print(
+            &store
+                .documents()?
+                .into_iter()
+                .filter(|d| {
+                    profile.as_ref().is_none_or(|p| *p == d.profile_id)
+                        && (!approved || d.status == ReviewStatus::Approved)
+                })
+                .collect::<Vec<_>>(),
+        )?,
+        Commands::Show { id } => {
+            let d = store.document(&id)?;
+            print(
+                &serde_json::json!({"issues":d.issues(),"source":store.source(&id)?,"document":d}),
+            )?;
+        }
+        Commands::Review {
+            id,
+            revision,
+            fields,
+            taxes,
+            input,
+            merge_taxes,
+        } => {
+            let mut d = if let Some(file) = input {
+                serde_json::from_slice::<Document>(&std::fs::read(file)?)?
+            } else {
+                store.document(&id)?
+            };
+            ensure!(
+                d.id == id && d.revision == revision,
+                "Review input identity/revision mismatch"
+            );
+            for pair in fields {
+                let (key, value) = pair
+                    .split_once('=')
+                    .context("Use --set field=value; an empty value means null")?;
+                ensure!(d.fields.contains_key(key), "Unknown template field: {key}");
+                d.set(key, Some(value.into()));
+            }
+            if let Some(file) = taxes {
+                d.taxes = serde_json::from_slice(&std::fs::read(file)?)?;
+            }
+            if let Some(merge) = merge_taxes {
+                d.merge_taxes = merge;
+            }
+            store.review(&mut d)?;
+            print(&d)?;
+        }
+        Commands::Approve {
+            id,
+            revision,
+            acknowledge,
+        } => print(&store.approve(&id, revision, &acknowledge)?)?,
+        Commands::Reopen { id, revision } => print(&store.reopen(&id, revision)?)?,
+        Commands::Delete { id, revision } => store.delete(&id, revision)?,
+        Commands::Export {
+            output,
+            format,
+            profile,
+            ids,
+        } => {
+            let docs = store
+                .documents()?
+                .into_iter()
+                .filter(|d| {
+                    d.status == ReviewStatus::Approved
+                        && profile.as_ref().is_none_or(|p| *p == d.profile_id)
+                        && (ids.is_empty() || ids.contains(&d.id))
+                })
+                .collect::<Vec<_>>();
+            ensure!(
+                ids.iter().all(|id| docs.iter().any(|d| d.id == *id)),
+                "Some selected IDs are missing, unapproved, or belong to another profile"
+            );
+            let format = format.unwrap_or(store.settings()?.default_export.parse()?);
+            export::export(&docs, format, &output)?;
+            print(&serde_json::json!({"exported":docs.len(),"output":output}))?;
+        }
+        Commands::Settings { action } => match action {
+            SettingAction::Show => print(
+                &serde_json::json!({"settings":store.settings()?,"telemetry_package":"Deferred pending contents and deletion policy decision; no collection or purge is implemented"}),
+            )?,
+            SettingAction::Set {
+                telemetry,
+                endpoint,
+                model,
+                api_key_env,
+                protocol,
+                default_export,
+            } => {
+                let mut s: Settings = store.settings()?;
+                if let Some(v) = telemetry {
+                    s.telemetry_enabled = v;
+                }
+                if let Some(v) = endpoint {
+                    s.endpoint.url = v;
+                }
+                if let Some(v) = model {
+                    s.endpoint.model = v;
+                }
+                if let Some(v) = api_key_env {
+                    s.endpoint.api_key_env = if v.is_empty() { None } else { Some(v) };
+                }
+                if let Some(v) = protocol {
+                    s.endpoint.protocol = v;
+                }
+                if let Some(v) = default_export {
+                    s.default_export = v;
+                }
+                store.save_settings(&s)?;
+                print(&s)?;
+            }
+        },
+        Commands::Backup { destination } => store.backup(&destination)?,
+        Commands::ConnectionCheck => {
+            store.settings()?.endpoint.health()?;
+            print(&serde_json::json!({"connected":true}))?;
+        }
+        Commands::Benchmark {
+            dataset,
+            report,
+            commit,
+        } => {
+            ensure!(
+                std::env::var("FATROCU_BENCHMARK_ENABLED").as_deref() == Ok("1"),
+                "Benchmark is on hold. Confirm dataset readiness and update the agent instructions before setting FATROCU_BENCHMARK_ENABLED=1"
+            );
+            let endpoint: Endpoint = store.settings()?.endpoint;
+            fatrocu_core::storage::outside_repository(&report)?;
+            let result = benchmark::run(&dataset, &endpoint, commit)?;
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(report)?;
+            serde_json::to_writer_pretty(&mut file, &result)?;
+            print(&result)?;
+            ensure!(result.passed, "Extraction benchmark thresholds failed");
+        }
+        Commands::Update { install } => {
+            let release = update::check("fatrocu-cli", &store.root.join("updates"), true)?;
+            let available = update::newer(&release, env!("CARGO_PKG_VERSION"))?;
+            print(&serde_json::json!({"available":available,"release":release}))?;
+            if install && available {
+                let staged = update::stage(&release, false)?;
+                let executable = std::env::current_exe()?;
+                let directory = executable
+                    .parent()
+                    .context("Missing installation directory")?;
+                #[cfg(windows)]
+                {
+                    update::launch_helper(&staged, directory, None)?;
+                }
+                #[cfg(not(windows))]
+                {
+                    update::install(&staged, directory)?;
+                }
+            }
+        }
+        Commands::Schema { kind } => {
+            let profile = Profile {
+                id: String::new(),
+                legal_name: String::new(),
+                tax_id: String::new(),
+            };
+            let d = Document::blank(&profile, &Template::builtin(kind), kind);
+            print(&BTreeMap::from([
+                ("fields", serde_json::to_value(d.fields)?),
+                (
+                    "taxes",
+                    serde_json::json!([TaxRow {
+                        tax_type: Field::new(None),
+                        rate: Field::new(None),
+                        base: Field::new(None),
+                        amount: Field::new(None)
+                    }]),
+                ),
+            ]))?;
+        }
+    }
     Ok(())
 }
-

@@ -32,7 +32,7 @@ body:
     attributes:
       label: Model Used
       description: "Which model were you using?"
-      placeholder: "e.g. ImajeV-2B-Q8_0"
+      placeholder: "e.g. unsloth/Qwen3.5-4B-GGUF:UD-Q4_K_XL"
     validations:
       required: true
 

@@ -19,22 +19,26 @@ fn run() -> Result<()> {
     let stage: Stage = serde_json::from_slice(&std::fs::read(&args[0])?)?;
     let installation = PathBuf::from(&args[1]);
     let start = Instant::now();
-    loop {
+    let result = loop {
         match install(&stage, &installation) {
-            Ok(()) => break,
-            Err(e) if start.elapsed() > Duration::from_secs(60) => return Err(e),
+            Ok(()) => break Ok(()),
+            Err(e) if start.elapsed() > Duration::from_secs(60) => break Err(e),
             Err(_) => std::thread::sleep(Duration::from_millis(500)),
         }
-    }
+    };
     if let Some(relaunch) = args.get(2) {
         let path = PathBuf::from(relaunch);
         anyhow::ensure!(
             path.parent() == Some(installation.as_path()),
             "Relaunch must be in the installation directory"
         );
-        std::process::Command::new(path)
+        let mut command = std::process::Command::new(path);
+        if result.is_err() {
+            command.arg("--update-failed");
+        }
+        command
             .spawn()
             .context("Update installed, but relaunch failed")?;
     }
-    Ok(())
+    result
 }

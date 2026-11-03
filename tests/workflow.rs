@@ -328,6 +328,16 @@ fn benchmark_thresholds_are_not_rounded() {
     assert!(!count.passes(98));
 }
 #[test]
+fn benchmark_coverage_cannot_omit_z_reports_or_utts() {
+    let mut kinds = vec![DocumentKind::EArchive; 10];
+    kinds.extend(vec![DocumentKind::ZReport; 10]);
+    assert!(benchmark::validate_coverage(&kinds).is_err());
+    kinds[10] = DocumentKind::Utts;
+    assert!(benchmark::validate_coverage(&kinds).is_ok());
+    kinds.pop();
+    assert!(benchmark::validate_coverage(&kinds).is_err());
+}
+#[test]
 fn deterministic_import_does_not_contact_a_model() {
     let temp = tempfile::tempdir().unwrap();
     let file = temp.path().join("z.txt");

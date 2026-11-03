@@ -282,7 +282,7 @@ pub fn run(dataset: &Path, endpoint: &Endpoint, commit: String) -> Result<Report
         "Dataset and model revisions are required"
     );
     let mut cases = vec![];
-    let mut counts = [0, 0];
+    let mut kinds = vec![];
     let mut hashes = std::collections::BTreeSet::new();
     for (index, c) in manifest.documents.iter().enumerate() {
         let source = private_path(&root, &c.source)?;
@@ -313,15 +313,10 @@ pub fn run(dataset: &Path, endpoint: &Endpoint, commit: String) -> Result<Report
                 "Null labels must require review (case {index})"
             );
         }
-        counts[usize::from(truth.kind != DocumentKind::EArchive)] += 1;
+        kinds.push(truth.kind);
         cases.push((source, truth));
     }
-    ensure!(
-        counts.iter().all(|n| *n >= 10),
-        "BLOCKED: need at least 10 distinct human-labeled documents per template (e-Archive: {}, OKC: {})",
-        counts[0],
-        counts[1]
-    );
+    validate_coverage(&kinds)?;
     let mut modes: BTreeMap<String, BTreeMap<String, Score>> = ["merged", "unmerged"]
         .into_iter()
         .map(|mode| {
@@ -378,4 +373,20 @@ pub fn run(dataset: &Path, endpoint: &Endpoint, commit: String) -> Result<Report
         modes,
         passed,
     })
+}
+pub fn validate_coverage(kinds: &[DocumentKind]) -> Result<()> {
+    let invoices = kinds
+        .iter()
+        .filter(|k| **k == DocumentKind::EArchive)
+        .count();
+    let okc = kinds.len() - invoices;
+    ensure!(
+        invoices >= 10 && okc >= 10,
+        "BLOCKED: need at least 10 distinct human-labeled documents per template (e-Archive: {invoices}, OKC: {okc})"
+    );
+    ensure!(
+        kinds.contains(&DocumentKind::ZReport) && kinds.contains(&DocumentKind::Utts),
+        "BLOCKED: OKC coverage must include both Z reports and UTTS/fuel slips"
+    );
+    Ok(())
 }

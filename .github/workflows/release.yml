@@ -1,6 +1,8 @@
-name: Build release candidate
+name: Build unsigned beta candidate
 on:
   workflow_dispatch:
+  push:
+    branches: ['codex/release-3.1.0-beta.1']
 permissions:
   contents: read
 jobs:
@@ -14,10 +16,11 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test --locked --all-targets
       - run: cargo build --locked --release
+      - name: Package and smoke-test unsigned beta
+        run: python scripts/package-beta.py --product cli --root . --output "${{ runner.temp }}/beta-dist"
       - uses: actions/upload-artifact@v4
         with:
-          name: unsigned-candidate-${{ matrix.os }}
-          path: |
-            target/release/fatrocu-cli*
-            target/release/fatrocu-updater*
-# Signing, private accuracy gates and stable release publication are separate manual steps.
+          name: beta-fatrocu-cli-${{ matrix.os }}
+          path: ${{ runner.temp }}/beta-dist/*
+          if-no-files-found: error
+# Publication is manual; private accuracy and publisher-signing gates remain pending.
